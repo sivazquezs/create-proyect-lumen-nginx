@@ -1,0 +1,134 @@
+#!/bin/bash
+# Author: @sivazquez 27-nov-2021
+# Create lumen proyect with composer
+
+# Colors
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[1;33m'
+blue='\033[1;34m'
+NC='\033[0m'
+
+application=$1
+applicationFolder="/var/www/html/$1"
+applicationFolderNginx="/etc/nginx/sites-available/"
+var="composer create-project --prefer-dist laravel/lumen blog"
+pass="ivan302446995"
+
+if [ $# -ne 1 ]; then
+    echo -e "\e[31m ERROR Add name proyect \e[0m"
+    echo -e "\e[33m example: ./create-lumen-proyect name-proyect \e[0m"
+    exit 1
+fi
+
+createLumenProyect(){
+
+    if [ -d $applicationFolder ]; then
+        echo -e "\e[31m ERROR the folder already exists \e[0m"
+        echo -e "\e[33m change name proyect \e[0m"
+        exit -1
+    fi
+
+    echo -e "\e[32m Creating proyect ..... \e[0m"
+
+    echo -e "${yellow}Creating the Application $application; with Composer..."
+
+    composer create-project --prefer-dist laravel/lumen $application
+
+    if [ -d $application ]; then
+        echo -e "${green} Application '$application created"
+    fi
+}
+
+addDomainHost(){
+    echo -e "${yellow}Adding $application to the /etc/hosts file..."
+    echo $pass | sudo -S  sed -i "1i 127.0.0.1   $application" /etc/hosts 
+    if grep -q $application /etc/hosts 
+    then
+        echo -e "${green} HOST '$application adding"
+    fi
+}
+
+moveFolderWWW(){
+    echo -e "${yellow}Moving $application to the /var/www/html folder..."
+    mv $application /var/www/html
+
+    if [ -d $applicationFolder ]; then
+        echo -e "${green}Folder $application adding to /var/www/html"
+    else
+        echo -e "\e[31m ERROR moving file in nginx \e[0m"
+        exit -1
+    fi
+
+}
+
+creatVhostNginx(){
+    echo -e "${yellow}Creating VHOT $application ${NC}......"
+    echo $pass | sudo -S  touch  /etc/nginx/sites-available/$application
+    echo $pass | sudo -S chown ivan:ivan /etc/nginx/sites-available/$application
+    echo " server {
+            listen 80;
+            listen [::]:80;
+
+            root /var/www/html/${application}/public;
+            server_name $application www.${application};
+
+            location / {
+                try_files \$uri /index.php?\$query_string;
+            }
+
+            location ~ \.php$ {
+                include snippets/fastcgi-php.conf;
+                fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+            }
+            access_log  /var/log/nginx/${application}_access.log;
+            error_log  /var/log/nginx/${application}_error.log;
+        }
+    " >> /etc/nginx/sites-available/${application}
+ 
+    echo $pass | sudo -S chown root:root /etc/nginx/sites-available/$application
+    echo $pass | sudo -S ln -s /etc/nginx/sites-available/$application /etc/nginx/sites-enabled
+
+    if [ -f /etc/nginx/sites-available/${application} ]; then
+        echo -e "${green}File $application added correctly to nginx for config"
+    else
+        echo -e "\e[31m ERROR creating file in nginx \e[0m"
+        exit -1
+    fi
+
+}
+
+validaServicioNginx(){
+    echo $pass | sudo -S service nginx restart
+    
+    nginx=`ps awx | grep 'nginx' |grep -v grep|wc -l`
+    
+    if [ $nginx == 0 ]; then
+        echo -e "${red}nginx error."
+        echo $pass | sudo -S service nginx status
+        exit -1
+    else
+        echo -e "${green}nginx corriendo correctamente."
+        echo $pass | sudo -S service nginx status
+        curl http://${application}
+    fi
+}
+
+destroyVhost(){
+    echo $pass | sudo -S rm -R /var/www/html/$application
+    echo $pass | sudo -S rm -R /etc/nginx/sites-available/$application
+    echo $pass | sudo -S rm -R /etc/nginx/sites-enabled/$application
+    echo $pass | sudo -S rm -R /etc/nginx/sites-enabled/$application
+    echo $pass | sudo -S rm -R /var/log/nginx/${application}_error.log
+    echo $pass | sudo -S rm -R /var/log/nginx/${application}_access.log
+    echo $pass | sudo -S sed -i "1d" /etc/hosts
+    echo $pass | sudo service nginx restart
+    echo $pass | sudo service nginx status
+}
+
+createLumenProyect;
+addDomainHost;
+moveFolderWWW;
+creatVhostNginx;
+validaServicioNginx;
+#destroyVhost;
